@@ -1,4 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
+from flask_jwt_extended import JWTManager
 
-# single db instance, imported by every model and by app.py
 db = SQLAlchemy()
+jwt = JWTManager()
