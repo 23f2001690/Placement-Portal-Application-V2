@@ -1,11 +1,11 @@
-import { apiFetch, logout } from "/src/api.js";
+import { apiFetch, apiDownload, logout } from "/src/api.js";
 import CompanyJobPositions from "/src/components/CompanyJobPositions.vue";
 import CompanyApplicants from "/src/components/CompanyApplicants.vue";
 
 export default {
     components: { CompanyJobPositions, CompanyApplicants },
     data() {
-        return { loading: true, profile: null, stats: null, selectedJob: null };
+        return { loading: true, profile: null, stats: null, selectedJob: null, exporting: false, exportMessage: "" };
     },
     async mounted() {
         try {
@@ -23,18 +23,45 @@ export default {
             const map = { approved: "bg-success", pending: "bg-warning text-dark", rejected: "bg-danger" };
             return map[status] || "bg-secondary";
         },
-        viewApplicants(job) {
-            this.selectedJob = job;
+        viewApplicants(job) { this.selectedJob = job; },
+        backToJobs() { this.selectedJob = null; },
+        async exportHistory() {
+            this.exporting = true;
+            this.exportMessage = "Export started...";
+            try {
+                const { task_id } = await apiFetch("/api/company/export", { method: "POST" });
+                this.pollExport(task_id);
+            } catch (err) {
+                this.exportMessage = "Could not start export.";
+                this.exporting = false;
+            }
         },
-        backToJobs() {
-            this.selectedJob = null;
+        async pollExport(taskId) {
+            const status = await apiFetch(`/api/company/export/status/${taskId}`);
+            if (status.state === "SUCCESS") {
+                this.exportMessage = "Export ready - downloading...";
+                this.exporting = false;
+                await apiDownload(`/api/company/export/download/${status.result.filename}`, status.result.filename);
+                alert("Your applications CSV has been downloaded.");
+            } else if (status.state === "FAILURE") {
+                this.exportMessage = "Export failed.";
+                this.exporting = false;
+            } else {
+                setTimeout(() => this.pollExport(taskId), 1500);
+            }
         },
     },
     template: `
         <div class="container py-4">
           <div class="d-flex justify-content-between align-items-center mb-4">
             <h3>Company Dashboard</h3>
-            <button class="btn btn-outline-danger btn-sm" @click="logout">Logout</button>
+            <div class="d-flex align-items-center gap-2">
+              <span v-if="exportMessage" class="text-muted small">{{ exportMessage }}</span>
+              <button class="btn btn-outline-secondary btn-sm" :disabled="exporting" @click="exportHistory">
+                {{ exporting ? "Exporting..." : "Export CSV" }}
+              </button>
+              <button class="btn btn-outline-danger btn-sm" @click="logout">Logout</button>
+            </div>
           </div>
 
           <p v-if="loading">Loading...</p>
@@ -57,12 +84,7 @@ export default {
                 <div class="col"><div class="card p-3"><div class="fs-4">{{ stats.total_shortlisted }}</div><div class="text-muted">Shortlisted</div></div></div>
               </div>
 
-              <CompanyApplicants
-                v-if="selectedJob"
-                :job-id="selectedJob.id"
-                :job-title="selectedJob.title"
-                @back="backToJobs"
-              />
+              <CompanyApplicants v-if="selectedJob" :job-id="selectedJob.id" :job-title="selectedJob.title" @back="backToJobs" />
               <CompanyJobPositions v-else @view-applicants="viewApplicants" />
             </div>
           </div>

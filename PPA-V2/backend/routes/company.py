@@ -1,9 +1,12 @@
 from datetime import datetime
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_from_directory
 from flask_jwt_extended import get_jwt_identity
 
 from backend.extensions import db
 from backend.decorators import role_required
+from backend.config import Config
+from backend.celery_app import celery
+from backend.tasks.exports import export_company_applications
 from backend.models.user import User
 from backend.models.student import Student
 from backend.models.job_position import JobPosition
@@ -63,7 +66,6 @@ def list_job_positions():
 @role_required("company")
 def create_job_position():
     company = _current_company()
-    # only approved companies may create drives - enforced here, not just in the UI
     if not _is_approved(company):
         return jsonify(error="Your company must be approved by admin before posting drives"), 403
 
@@ -79,16 +81,10 @@ def create_job_position():
             return jsonify(error="application_deadline must be a valid date/time"), 400
 
     job = JobPosition(
-        company_id=company.id,
-        title=data["title"],
-        description=data.get("description"),
-        salary=data.get("salary"),
-        skills_required=data.get("skills_required"),
-        min_cgpa=data.get("min_cgpa") or 0,
-        eligible_branches=data.get("eligible_branches"),
-        eligible_year=data.get("eligible_year"),
-        application_deadline=deadline,
-        status="pending",
+        company_id=company.id, title=data["title"], description=data.get("description"),
+        salary=data.get("salary"), skills_required=data.get("skills_required"),
+        min_cgpa=data.get("min_cgpa") or 0, eligible_branches=data.get("eligible_branches"),
+        eligible_year=data.get("eligible_year"), application_deadline=deadline, status="pending",
     )
     db.session.add(job)
     db.session.commit()
@@ -147,9 +143,7 @@ def update_application_status(application_id):
             application.placement.joining_date = joining_date or application.placement.joining_date
         else:
             db.session.add(Placement(
-                application_id=application.id,
-                student_id=application.student_id,
-                company_id=company.id,
+                application_id=application.id, student_id=application.student_id, company_id=company.id,
                 position_title=application.job_position.title,
                 package_offered=data.get("package_offered") or application.job_position.salary,
                 joining_date=joining_date,
@@ -189,7 +183,6 @@ def student_history(student_id):
     company = _current_company()
     student = Student.query.get_or_404(student_id)
 
-    # a company may only view students who have actually applied to one of its drives
     applied_here = Application.query.join(JobPosition).filter(
         Application.student_id == student.id, JobPosition.company_id == company.id
     ).first()
@@ -202,6 +195,32 @@ def student_history(student_id):
                  "cgpa": student.cgpa, "skills": student.skills, "email": student.user.email},
         applications=[_application_json(a) for a in applications],
     ), 200
+
+
+@company_bp.route("/export", methods=["POST"])
+@role_required("company")
+def trigger_export():
+    company = _current_company()
+    task = export_company_applications.delay(company.id)
+    return jsonify(task_id=task.id), 202
+
+
+@company_bp.route("/export/status/<task_id>", methods=["GET"])
+@role_required("company")
+def export_status(task_id):
+    task = celery.AsyncResult(task_id)
+    response = {"state": task.state}
+    if task.state == "SUCCESS":
+        response["result"] = task.result
+    elif task.state == "FAILURE":
+        response["error"] = str(task.info)
+    return jsonify(response), 200
+
+
+@company_bp.route("/export/download/<filename>", methods=["GET"])
+@role_required("company")
+def export_download(filename):
+    return send_from_directory(Config.EXPORT_FOLDER, filename, as_attachment=True)
 
 
 def _company_json(c):

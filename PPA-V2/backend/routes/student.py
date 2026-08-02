@@ -1,12 +1,15 @@
 import os
 from datetime import datetime
-from flask import Blueprint, request, jsonify, Response
+from flask import Blueprint, request, jsonify, Response, send_from_directory
 from werkzeug.utils import secure_filename
 from flask_jwt_extended import get_jwt_identity
 from sqlalchemy import or_
 
 from backend.extensions import db
 from backend.decorators import role_required
+from backend.config import Config
+from backend.celery_app import celery
+from backend.tasks.exports import export_student_applications
 from backend.models.user import User
 from backend.models.job_position import JobPosition
 from backend.models.application import Application
@@ -75,9 +78,7 @@ def list_job_positions():
     query = JobPosition.query.filter(JobPosition.status.in_(["approved", "closed"]))
     if search:
         like = f"%{search}%"
-        query = query.filter(
-            or_(JobPosition.title.ilike(like), JobPosition.skills_required.ilike(like))
-        )
+        query = query.filter(or_(JobPosition.title.ilike(like), JobPosition.skills_required.ilike(like)))
     jobs = query.order_by(JobPosition.id.desc()).all()
 
     student = _current_student()
@@ -137,8 +138,7 @@ def offer_letter(application_id):
     company_name = application.job_position.company.company_name
 
     text = (
-        "PLACEMENT OFFER LETTER\n"
-        "=======================\n\n"
+        "PLACEMENT OFFER LETTER\n=======================\n\n"
         f"Student Name : {student.full_name}\n"
         f"Company      : {company_name}\n"
         f"Position     : {placement.position_title}\n"
@@ -150,10 +150,35 @@ def offer_letter(application_id):
     )
 
     return Response(
-        text,
-        mimetype="text/plain",
+        text, mimetype="text/plain",
         headers={"Content-Disposition": f"attachment; filename=offer_letter_{application.id}.txt"},
     )
+
+
+@student_bp.route("/export", methods=["POST"])
+@role_required("student")
+def trigger_export():
+    student = _current_student()
+    task = export_student_applications.delay(student.id)
+    return jsonify(task_id=task.id), 202
+
+
+@student_bp.route("/export/status/<task_id>", methods=["GET"])
+@role_required("student")
+def export_status(task_id):
+    task = celery.AsyncResult(task_id)
+    response = {"state": task.state}
+    if task.state == "SUCCESS":
+        response["result"] = task.result
+    elif task.state == "FAILURE":
+        response["error"] = str(task.info)
+    return jsonify(response), 200
+
+
+@student_bp.route("/export/download/<filename>", methods=["GET"])
+@role_required("student")
+def export_download(filename):
+    return send_from_directory(Config.EXPORT_FOLDER, filename, as_attachment=True)
 
 
 def _check_eligibility(student, job):
@@ -170,14 +195,8 @@ def _check_eligibility(student, job):
 
 def _student_json(s):
     return {
-        "id": s.id,
-        "full_name": s.full_name,
-        "branch": s.branch,
-        "year_of_study": s.year_of_study,
-        "cgpa": s.cgpa,
-        "skills": s.skills,
-        "experience": s.experience,
-        "resume_path": s.resume_path,
+        "id": s.id, "full_name": s.full_name, "branch": s.branch, "year_of_study": s.year_of_study,
+        "cgpa": s.cgpa, "skills": s.skills, "experience": s.experience, "resume_path": s.resume_path,
         "email": s.user.email,
     }
 
@@ -185,31 +204,21 @@ def _student_json(s):
 def _job_json(j, student, applied_job_ids):
     eligible, reason = _check_eligibility(student, j)
     return {
-        "id": j.id,
-        "title": j.title,
-        "description": j.description,
-        "company_name": j.company.company_name,
-        "salary": j.salary,
-        "skills_required": j.skills_required,
-        "min_cgpa": j.min_cgpa,
-        "eligible_branches": j.eligible_branches,
-        "eligible_year": j.eligible_year,
+        "id": j.id, "title": j.title, "description": j.description, "company_name": j.company.company_name,
+        "salary": j.salary, "skills_required": j.skills_required, "min_cgpa": j.min_cgpa,
+        "eligible_branches": j.eligible_branches, "eligible_year": j.eligible_year,
         "application_deadline": j.application_deadline.isoformat() if j.application_deadline else None,
-        "status": j.status,
-        "already_applied": j.id in applied_job_ids,
-        "is_eligible": eligible,
-        "eligibility_reason": reason,
+        "status": j.status, "already_applied": j.id in applied_job_ids,
+        "is_eligible": eligible, "eligibility_reason": reason,
     }
 
 
 def _application_json(a):
     return {
-        "id": a.id,
-        "job_id": a.job_id,
-        "job_title": a.job_position.title,
-        "company_name": a.job_position.company.company_name,
-        "status": a.status,
-        "feedback": a.feedback,
+        "id": a.id, "job_id": a.job_id, "job_title": a.job_position.title,
+        "company_name": a.job_position.company.company_name, "status": a.status, "feedback": a.feedback,
         "interview_datetime": a.interview_datetime.isoformat() if a.interview_datetime else None,
         "applied_on": a.applied_on.isoformat(),
+        "package_offered": a.placement.package_offered if a.placement else None,
+        "joining_date": a.placement.joining_date.isoformat() if a.placement and a.placement.joining_date else None,
     }
