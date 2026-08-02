@@ -12,6 +12,7 @@ class Student(db.Model):
     year_of_study = db.Column(db.Integer)
     cgpa = db.Column(db.Float)
     skills = db.Column(db.String(300))
+    experience = db.Column(db.Text)
     resume_path = db.Column(db.String(200))
 
     is_blacklisted = db.Column(db.Boolean, default=False)
