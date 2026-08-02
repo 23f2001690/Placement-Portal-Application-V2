@@ -130,8 +130,8 @@ def offer_letter(application_id):
 
     if application.student_id != student.id:
         return jsonify(error="This application does not belong to you"), 403
-    if application.status != "selected" or not application.placement:
-        return jsonify(error="Offer letter is only available for selected applications"), 400
+    if application.status != "placed" or not application.placement:
+        return jsonify(error="Offer letter is only available once your placement is confirmed"), 400
 
     placement = application.placement
     company_name = application.job_position.company.company_name

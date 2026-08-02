@@ -1,8 +1,10 @@
 import { apiFetch } from "/src/api.js";
+import ApplicationHistoryModal from "/src/components/ApplicationHistoryModal.vue";
 
 export default {
+    components: { ApplicationHistoryModal },
     data() {
-        return { students: [], search: "", loading: true };
+        return { students: [], search: "", loading: true, historyData: null };
     },
     async mounted() {
         await this.load();
@@ -22,6 +24,9 @@ export default {
         async toggleBlacklist(student) {
             await apiFetch(`/api/admin/students/${student.id}/blacklist`, { method: "POST" });
             await this.load();
+        },
+        async viewHistory(student) {
+            this.historyData = await apiFetch(`/api/admin/students/${student.id}/history`);
         },
     },
     template: `
@@ -46,6 +51,7 @@ export default {
                 <td>{{ s.email }}</td>
                 <td>{{ s.is_blacklisted ? "Yes" : "No" }}</td>
                 <td class="d-flex gap-1 flex-wrap">
+                  <button class="btn btn-sm btn-outline-primary" @click="viewHistory(s)">History</button>
                   <button class="btn btn-sm btn-outline-dark" @click="toggleBlacklist(s)">
                     {{ s.is_blacklisted ? "Unblacklist" : "Blacklist" }}
                   </button>
@@ -55,6 +61,13 @@ export default {
               <tr v-if="students.length === 0"><td colspan="7" class="text-center text-muted">No students found</td></tr>
             </tbody>
           </table>
+
+          <ApplicationHistoryModal
+            v-if="historyData"
+            :profile="historyData.profile"
+            :applications="historyData.applications"
+            @close="historyData = null"
+          />
         </div>
     `,
 };

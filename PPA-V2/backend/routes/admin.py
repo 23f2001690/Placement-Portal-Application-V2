@@ -109,6 +109,17 @@ def toggle_student_blacklist(student_id):
     db.session.commit()
     return jsonify(message="Updated", student=_student_json(student)), 200
 
+@admin_bp.route("/students/<int:student_id>/history", methods=["GET"])
+@role_required("admin")
+def student_history(student_id):
+    student = Student.query.get_or_404(student_id)
+    applications = Application.query.filter_by(student_id=student.id).order_by(Application.id.desc()).all()
+    return jsonify(
+        profile=_student_json(student),
+        applications=[_history_application_json(a) for a in applications],
+    ), 200
+
+
 
 # ---------- Job Postings / Placement Drives ----------
 
@@ -206,4 +217,15 @@ def _application_json(a):
         "company_name": a.job_position.company.company_name,
         "status": a.status,
         "applied_on": a.applied_on.isoformat(),
+    }
+
+def _history_application_json(a):
+    placement = a.placement
+    return {
+        "id": a.id, "job_title": a.job_position.title, "company_name": a.job_position.company.company_name,
+        "status": a.status, "feedback": a.feedback,
+        "interview_datetime": a.interview_datetime.isoformat() if a.interview_datetime else None,
+        "applied_on": a.applied_on.isoformat(),
+        "package_offered": placement.package_offered if placement else None,
+        "joining_date": placement.joining_date.isoformat() if placement and placement.joining_date else None,
     }

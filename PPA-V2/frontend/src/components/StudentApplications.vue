@@ -20,7 +20,10 @@ export default {
             }
         },
         statusBadge(status) {
-            const map = { applied: "bg-primary", shortlisted: "bg-info text-dark", selected: "bg-success", rejected: "bg-danger" };
+            const map = {
+                applied: "bg-primary", shortlisted: "bg-info text-dark", interview: "bg-warning text-dark",
+                offer: "bg-success", placed: "bg-dark", rejected: "bg-danger",
+            };
             return map[status] || "bg-secondary";
         },
     },
@@ -43,8 +46,13 @@ export default {
               <div v-if="a.feedback" class="mt-1">
                 <small><strong>Feedback:</strong> {{ a.feedback }}</small>
               </div>
+              <div v-if="a.status === 'placed'" class="mt-1">
+                <small><strong>Package:</strong> {{ a.package_offered || "-" }}
+                  <span v-if="a.joining_date"> · Joining {{ a.joining_date }}</span>
+                </small>
+              </div>
 
-              <div v-if="a.status === 'selected'" class="mt-2">
+              <div v-if="a.status === 'placed'" class="mt-2">
                 <button class="btn btn-sm btn-outline-success" @click="downloadOfferLetter(a)">Download Offer Letter</button>
               </div>
             </div>
