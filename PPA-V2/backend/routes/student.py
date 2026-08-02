@@ -13,6 +13,7 @@ from backend.tasks.exports import export_student_applications
 from backend.models.user import User
 from backend.models.job_position import JobPosition
 from backend.models.application import Application
+from backend.cache import cached
 
 student_bp = Blueprint("student", __name__, url_prefix="/api/student")
 
@@ -73,6 +74,7 @@ def upload_resume():
 
 @student_bp.route("/job-positions", methods=["GET"])
 @role_required("student")
+@cached("student:job_positions", ttl=30, per_user=True)
 def list_job_positions():
     search = request.args.get("search", "").strip()
     query = JobPosition.query.filter(JobPosition.status.in_(["approved", "closed"]))

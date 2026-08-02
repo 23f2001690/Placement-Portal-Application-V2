@@ -12,6 +12,7 @@ from backend.models.student import Student
 from backend.models.job_position import JobPosition
 from backend.models.application import Application
 from backend.models.placement import Placement
+from backend.cache import invalidate_prefix
 
 company_bp = Blueprint("company", __name__, url_prefix="/api/company")
 
@@ -100,6 +101,7 @@ def close_job_position(job_id):
         return jsonify(error="Only an approved drive can be closed"), 400
     job.status = "closed"
     db.session.commit()
+    invalidate_prefix("student:job_positions")
     return jsonify(message="Drive closed", job_position=_job_json(job)), 200
 
 
