@@ -1,13 +1,16 @@
 import { apiFetch, logout } from "/src/api.js";
+import StudentJobPositions from "/src/components/StudentJobPositions.vue";
+import StudentApplications from "/src/components/StudentApplications.vue";
+import StudentProfile from "/src/components/StudentProfile.vue";
 
 export default {
+    components: { StudentJobPositions, StudentApplications, StudentProfile },
     data() {
-        return { loading: true, profile: null };
+        return { loading: true, profile: null, activeTab: "drives" };
     },
     async mounted() {
         try {
-            const data = await apiFetch("/api/auth/me");
-            this.profile = data.profile;
+            this.profile = await apiFetch("/api/student/profile");
         } catch (e) {
             window.location.hash = "/login";
         } finally {
@@ -21,10 +24,23 @@ export default {
             <h3>Student Dashboard</h3>
             <button class="btn btn-outline-danger btn-sm" @click="logout">Logout</button>
           </div>
-          <div v-if="loading">Loading...</div>
-          <div v-else-if="profile">
-            <p>Welcome, <strong>{{ profile.name }}</strong></p>
-            <p class="text-muted">Placement drives and applications come next.</p>
+
+          <p v-if="loading">Loading...</p>
+
+          <div v-else>
+            <p class="text-muted">Welcome, {{ profile.full_name }}</p>
+
+            <ul class="nav nav-tabs mb-3">
+              <li class="nav-item" v-for="tab in ['drives', 'applications', 'profile']" :key="tab">
+                <a class="nav-link" :class="{ active: activeTab === tab }" href="#" @click.prevent="activeTab = tab">
+                  {{ tab.charAt(0).toUpperCase() + tab.slice(1) }}
+                </a>
+              </li>
+            </ul>
+
+            <StudentJobPositions v-if="activeTab === 'drives'" />
+            <StudentApplications v-if="activeTab === 'applications'" />
+            <StudentProfile v-if="activeTab === 'profile'" />
           </div>
         </div>
     `,
