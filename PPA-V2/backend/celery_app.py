@@ -22,9 +22,17 @@ celery.conf.beat_schedule = {
         "task": "backend.tasks.reminders.send_interview_reminders",
         "schedule": crontab(hour=8, minute=0),
     },
-    "monthly-placement-report": {
+    "daily-deadline-reminders": {
+        "task": "backend.tasks.reminders.send_deadline_reminders",
+        "schedule": crontab(hour=8, minute=15),
+    },
+    "monthly-company-report": {
         "task": "backend.tasks.reports.generate_monthly_report",
         "schedule": crontab(day_of_month=1, hour=7, minute=0),
+    },
+    "monthly-admin-report": {
+        "task": "backend.tasks.reports.generate_admin_monthly_report",
+        "schedule": crontab(day_of_month=1, hour=7, minute=5),
     },
 }
 

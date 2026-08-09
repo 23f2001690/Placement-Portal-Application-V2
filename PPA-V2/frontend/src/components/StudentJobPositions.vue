@@ -27,7 +27,7 @@ export default {
             return map[status] || "bg-secondary";
         },
     },
-    template: `
+   template: `
         <div>
           <div class="d-flex gap-2 mb-3">
             <input v-model="search" @keyup.enter="load" class="form-control" placeholder="Search by title or skills" />
@@ -39,9 +39,12 @@ export default {
             <div v-if="jobs.length === 0" class="text-muted">No drives available right now.</div>
 
             <div v-for="j in jobs" :key="j.id" class="card p-3 mb-3">
-              <div class="d-flex justify-content-between">
+              <div class="d-flex justify-content-between align-items-start">
                 <h6 class="mb-1">{{ j.title }} <span class="badge" :class="statusBadge(j.status)">{{ j.status }}</span></h6>
-                <strong>{{ j.company_name }}</strong>
+                <div class="text-end">
+                  <small class="text-muted d-block">COMPANY</small>
+                  <span class="fw-bold text-uppercase fs-5">{{ j.company_name }}</span>
+                </div>
               </div>
               <p class="mb-1">{{ j.description || "No description provided." }}</p>
               <small class="text-muted">

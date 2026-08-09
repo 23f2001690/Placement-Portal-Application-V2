@@ -1,5 +1,10 @@
 import { apiFetch } from "/src/api.js";
 
+const BLANK_FORM = {
+    title: "", description: "", salary: "", skills_required: "",
+    min_cgpa: null, eligible_branches: "", eligible_year: null, application_deadline: "",
+};
+
 export default {
     emits: ["view-applicants"],
     data() {
@@ -7,11 +12,9 @@ export default {
             jobs: [],
             loading: true,
             showForm: false,
+            editingJobId: null,
             errorMessage: "",
-            form: {
-                title: "", description: "", salary: "", skills_required: "",
-                min_cgpa: null, eligible_branches: "", eligible_year: null, application_deadline: "",
-            },
+            form: { ...BLANK_FORM },
         };
     },
     async mounted() {
@@ -23,21 +26,51 @@ export default {
             this.jobs = await apiFetch("/api/company/job-positions");
             this.loading = false;
         },
+        openCreateForm() {
+            this.editingJobId = null;
+            this.form = { ...BLANK_FORM };
+            this.errorMessage = "";
+            this.showForm = true;
+        },
+        openEditForm(job) {
+            this.editingJobId = job.id;
+            this.form = {
+                title: job.title || "",
+                description: job.description || "",
+                salary: job.salary || "",
+                skills_required: job.skills_required || "",
+                min_cgpa: job.min_cgpa ?? null,
+                eligible_branches: job.eligible_branches || "",
+                eligible_year: job.eligible_year ?? null,
+                application_deadline: job.application_deadline ? job.application_deadline.slice(0, 16) : "",
+            };
+            this.errorMessage = "";
+            this.showForm = true;
+        },
+        cancelForm() {
+            this.showForm = false;
+            this.editingJobId = null;
+        },
         async submitJob() {
             this.errorMessage = "";
             try {
-                await apiFetch("/api/company/job-positions", {
-                    method: "POST",
-                    body: JSON.stringify(this.form),
-                });
+                if (this.editingJobId) {
+                    await apiFetch(`/api/company/job-positions/${this.editingJobId}`, {
+                        method: "PUT",
+                        body: JSON.stringify(this.form),
+                    });
+                } else {
+                    await apiFetch("/api/company/job-positions", {
+                        method: "POST",
+                        body: JSON.stringify(this.form),
+                    });
+                }
                 this.showForm = false;
-                this.form = {
-                    title: "", description: "", salary: "", skills_required: "",
-                    min_cgpa: null, eligible_branches: "", eligible_year: null, application_deadline: "",
-                };
+                this.editingJobId = null;
+                this.form = { ...BLANK_FORM };
                 await this.load();
             } catch (err) {
-                this.errorMessage = err.data?.error || "Could not create drive.";
+                this.errorMessage = err.data?.error || "Could not save drive.";
             }
         },
         async closeJob(job) {
@@ -54,12 +87,13 @@ export default {
         <div>
           <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="mb-0">My Drives</h5>
-            <button class="btn btn-primary btn-sm" @click="showForm = !showForm">
+            <button class="btn btn-primary btn-sm" @click="showForm ? cancelForm() : openCreateForm()">
               {{ showForm ? "Cancel" : "+ Post New Drive" }}
             </button>
           </div>
 
           <div v-if="showForm" class="card p-3 mb-4">
+            <h6 class="mb-3">{{ editingJobId ? "Edit Drive" : "New Drive" }}</h6>
             <div v-if="errorMessage" class="alert alert-danger py-2">{{ errorMessage }}</div>
             <form @submit.prevent="submitJob">
               <div class="mb-2">
@@ -98,7 +132,12 @@ export default {
                 <label class="form-label">Application Deadline</label>
                 <input v-model="form.application_deadline" type="datetime-local" class="form-control" />
               </div>
-              <button type="submit" class="btn btn-success">Submit for Admin Approval</button>
+              <button type="submit" class="btn btn-success">
+                {{ editingJobId ? "Save Changes" : "Submit for Admin Approval" }}
+              </button>
+              <small v-if="editingJobId" class="text-muted d-block mt-2">
+                Saving will send this drive back to admin for re-approval.
+              </small>
             </form>
           </div>
 
@@ -116,6 +155,9 @@ export default {
                 <td class="d-flex gap-1 flex-wrap">
                   <button class="btn btn-sm btn-outline-primary" @click="$emit('view-applicants', { id: j.id, title: j.title })">
                     View Applicants
+                  </button>
+                  <button class="btn btn-sm btn-outline-secondary" :disabled="j.status === 'closed'" @click="openEditForm(j)">
+                    Edit
                   </button>
                   <button v-if="j.status === 'approved'" class="btn btn-sm btn-outline-secondary" @click="closeJob(j)">
                     Close

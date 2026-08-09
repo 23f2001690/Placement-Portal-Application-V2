@@ -24,3 +24,4 @@ class Config:
     SMTP_FROM = os.environ.get("SMTP_FROM", "placementcell@institute.edu")
 
     EXPORT_FOLDER = os.path.join(BASE_DIR, "exports")
+    RESUME_FOLDER = os.path.join(BASE_DIR, "uploads", "resumes")

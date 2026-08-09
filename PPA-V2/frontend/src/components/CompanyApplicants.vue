@@ -1,4 +1,5 @@
-import { apiFetch } from "/src/api.js";
+
+import { apiFetch, apiOpenFile } from "/src/api.js";
 import ApplicationHistoryModal from "/src/components/ApplicationHistoryModal.vue";
 
 export default {
@@ -29,6 +30,13 @@ export default {
                 body: JSON.stringify(body),
             });
             await this.load();
+        },
+        async viewResume(application) {
+            try {
+                await apiOpenFile(`/api/company/applications/${application.id}/resume`);
+            } catch (err) {
+                alert(err.message || "Could not open resume.");
+            }
         },
         async scheduleInterview(application) {
             const when = prompt("Interview date & time (e.g. 2026-08-15T10:30)");
@@ -64,7 +72,13 @@ export default {
             <div v-if="applications.length === 0" class="text-muted">No applications received yet.</div>
 
             <div v-for="a in applications" :key="a.id" class="card p-3 mb-3">
-              <h6 class="mb-1">{{ a.student_name }} <span class="badge" :class="statusBadge(a.status)">{{ a.status }}</span></h6>
+              <h6 class="mb-1 d-flex align-items-center gap-2">
+                {{ a.student_name }}
+                <span class="badge" :class="statusBadge(a.status)">{{ a.status }}</span>
+                <button class="btn btn-sm btn-outline-info ms-2" :disabled="!a.resume_path" @click="viewResume(a)">
+                  {{ a.resume_path ? "View Resume" : "No Resume" }}
+                </button>
+              </h6>
               <small class="text-muted">{{ a.student_email }} · {{ a.branch || "-" }} · CGPA {{ a.cgpa ?? "-" }}</small>
               <div v-if="a.interview_datetime" class="mt-1">
                 <small class="text-info">Interview: {{ a.interview_datetime.replace('T', ' ').slice(0, 16) }}</small>

@@ -2,7 +2,7 @@ import { apiFetch } from "/src/api.js";
 
 export default {
     data() {
-        return { jobs: [], statusFilter: "", loading: true };
+        return { jobs: [], statusFilter: "", search: "", loading: true };
     },
     async mounted() {
         await this.load();
@@ -10,7 +10,10 @@ export default {
     methods: {
         async load() {
             this.loading = true;
-            const query = this.statusFilter ? `?status=${this.statusFilter}` : "";
+            const params = new URLSearchParams();
+            if (this.statusFilter) params.set("status", this.statusFilter);
+            if (this.search) params.set("search", this.search);
+            const query = params.toString() ? `?${params.toString()}` : "";
             this.jobs = await apiFetch(`/api/admin/job-positions${query}`);
             this.loading = false;
         },
@@ -35,6 +38,8 @@ export default {
     template: `
         <div>
           <div class="d-flex gap-2 mb-3">
+            <input v-model="search" @keyup.enter="load" class="form-control" placeholder="Search by drive title or company" />
+            <button class="btn btn-outline-primary" @click="load">Search</button>
             <select v-model="statusFilter" @change="load" class="form-select" style="max-width: 200px;">
               <option value="">All statuses</option>
               <option value="pending">Pending</option>

@@ -39,6 +39,19 @@ export async function apiDownload(url, fallbackName) {
     URL.revokeObjectURL(link.href);
 }
 
+export async function apiOpenFile(url) {
+    const token = localStorage.getItem("access_token");
+    const res = await fetch(url, { headers: token ? { Authorization: "Bearer " + token } : {} });
+
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Could not open file");
+    }
+
+    const blob = await res.blob();
+    window.open(URL.createObjectURL(blob), "_blank");
+}
+
 export function logout() {
     localStorage.clear();
     window.location.hash = "/login";

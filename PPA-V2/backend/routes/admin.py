@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from sqlalchemy import or_
-
+from backend.celery_app import celery
+from backend.tasks.reports import generate_admin_monthly_report
 from backend.extensions import db
 from backend.decorators import role_required
 from backend.cache import cached, invalidate_prefix
@@ -126,9 +127,13 @@ def toggle_student_blacklist(student_id):
 @role_required("admin")
 def list_job_positions():
     status = request.args.get("status")
-    query = JobPosition.query
+    search = request.args.get("search", "").strip()
+    query = JobPosition.query.join(Company, JobPosition.company_id == Company.id)
     if status:
-        query = query.filter_by(status=status)
+        query = query.filter(JobPosition.status == status)
+    if search:
+        like = f"%{search}%"
+        query = query.filter(or_(JobPosition.title.ilike(like), Company.company_name.ilike(like)))
     jobs = query.order_by(JobPosition.id.desc()).all()
     return jsonify([_job_json(j) for j in jobs]), 200
 
@@ -184,6 +189,23 @@ def student_history(student_id):
         applications=[_history_application_json(a) for a in applications],
     ), 200
 
+@admin_bp.route("/reports/send", methods=["POST"])
+@role_required("admin")
+def trigger_admin_report():
+    task = generate_admin_monthly_report.delay()
+    return jsonify(task_id=task.id), 202
+
+
+@admin_bp.route("/reports/status/<task_id>", methods=["GET"])
+@role_required("admin")
+def report_status(task_id):
+    task = celery.AsyncResult(task_id)
+    response = {"state": task.state}
+    if task.state == "SUCCESS":
+        response["result"] = task.result
+    elif task.state == "FAILURE":
+        response["error"] = str(task.info)
+    return jsonify(response), 200
 
 # ---------- JSON helpers ----------
 

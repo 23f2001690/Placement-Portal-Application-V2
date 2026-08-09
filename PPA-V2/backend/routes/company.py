@@ -7,6 +7,7 @@ from backend.decorators import role_required
 from backend.config import Config
 from backend.celery_app import celery
 from backend.tasks.exports import export_company_applications
+from backend.tasks.reminders import notify_admin_interview_scheduled
 from backend.models.user import User
 from backend.models.student import Student
 from backend.models.job_position import JobPosition
@@ -90,6 +91,41 @@ def create_job_position():
     db.session.add(job)
     db.session.commit()
     return jsonify(message="Drive submitted for admin approval", job_position=_job_json(job)), 201
+
+
+@company_bp.route("/job-positions/<int:job_id>", methods=["PUT"])
+@role_required("company")
+def update_job_position(job_id):
+    company = _current_company()
+    job = JobPosition.query.filter_by(id=job_id, company_id=company.id).first_or_404()
+
+    if job.status == "closed":
+        return jsonify(error="Closed drives cannot be edited"), 400
+
+    data = request.get_json() or {}
+    if not data.get("title"):
+        return jsonify(error="Job title is required"), 400
+
+    deadline = job.application_deadline
+    if data.get("application_deadline"):
+        try:
+            deadline = datetime.fromisoformat(data["application_deadline"])
+        except ValueError:
+            return jsonify(error="application_deadline must be a valid date/time"), 400
+
+    job.title = data["title"]
+    job.description = data.get("description")
+    job.salary = data.get("salary")
+    job.skills_required = data.get("skills_required")
+    job.min_cgpa = data.get("min_cgpa") or 0
+    job.eligible_branches = data.get("eligible_branches")
+    job.eligible_year = data.get("eligible_year")
+    job.application_deadline = deadline
+    job.status = "pending"  # any edit needs a fresh admin approval
+
+    db.session.commit()
+    invalidate_prefix("student:job_positions")
+    return jsonify(message="Drive updated, pending admin re-approval", job_position=_job_json(job)), 200
 
 
 @company_bp.route("/job-positions/<int:job_id>/close", methods=["POST"])
@@ -176,6 +212,9 @@ def schedule_interview(application_id):
 
     application.status = "interview"
     db.session.commit()
+
+    notify_admin_interview_scheduled.delay(application.id)
+
     return jsonify(message="Interview scheduled", application=_application_json(application)), 200
 
 
@@ -224,6 +263,18 @@ def export_status(task_id):
 def export_download(filename):
     return send_from_directory(Config.EXPORT_FOLDER, filename, as_attachment=True)
 
+@company_bp.route("/applications/<int:application_id>/resume", methods=["GET"])
+@role_required("company")
+def view_resume(application_id):
+    company = _current_company()
+    application = Application.query.get_or_404(application_id)
+
+    if application.job_position.company_id != company.id:
+        return jsonify(error="This application does not belong to your company"), 403
+    if not application.student.resume_path:
+        return jsonify(error="This student has not uploaded a resume"), 404
+
+    return send_from_directory(Config.RESUME_FOLDER, application.student.resume_path, as_attachment=False)
 
 def _company_json(c):
     return {

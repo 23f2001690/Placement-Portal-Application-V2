@@ -17,8 +17,7 @@ from backend.cache import cached
 
 student_bp = Blueprint("student", __name__, url_prefix="/api/student")
 
-RESUME_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads", "resumes")
-os.makedirs(RESUME_FOLDER, exist_ok=True)
+os.makedirs(Config.RESUME_FOLDER, exist_ok=True)
 
 
 def _current_student():
@@ -65,7 +64,7 @@ def upload_resume():
         return jsonify(error="No file selected"), 400
 
     filename = secure_filename(f"student_{student.id}_{file.filename}")
-    file.save(os.path.join(RESUME_FOLDER, filename))
+    file.save(os.path.join(Config.RESUME_FOLDER, filename))
     student.resume_path = filename
     db.session.commit()
 

@@ -71,10 +71,16 @@ def register_company():
 @auth_bp.route("/login", methods=["POST"])
 def login():
     data = request.get_json() or {}
-    user = User.query.filter_by(email=data.get("email")).first()
+    email = data.get("email", "").strip()
+    password = data.get("password", "")
 
-    if not user or not user.check_password(data.get("password", "")):
-        return jsonify(error="Invalid email or password"), 401
+    user = User.query.filter_by(email=email).first()
+
+    if not user:
+        return jsonify(error="No account found with this email. Please register first."), 404
+
+    if not user.check_password(password):
+        return jsonify(error="Incorrect password. Please try again."), 401
 
     if not user.is_active:
         return jsonify(error="This account has been deactivated. Contact the placement cell."), 403
